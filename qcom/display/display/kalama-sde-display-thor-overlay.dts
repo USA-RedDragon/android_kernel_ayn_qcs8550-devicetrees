@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+#include "kalama-sde-display-thor.dtsi"
+
+/ {
+	model = "AYN Odin 2 Thor";
+
+	/*
+	 * Compatible mirrors the Thor board overlay so the display techpack and
+	 * the board overlay are recognised as the same product family.
+	 */
+	compatible = "ayntec,thor", "qcom,kalama-qrd", "qcom,kalama", "qcom,qrd";
+
+	/*
+	 * msm-id MUST include <603 0x20000> (QCS8550 == kalamap-qcs.dtb) and the
+	 * board-id MUST equal the Thor board overlay's <0x1000C 0> so merge_dtbs
+	 * pairs this display overlay with ayn-odin2-thor-overlay.dtbo and the
+	 * kalamap-qcs base. The mirrored extra msm-ids match the board overlay.
+	 */
+	qcom,msm-id = <603 0x20000>, <519 0x20000>, <536 0x20000>, <601 0x20000>;
+	qcom,board-id = <0x1000C 0>;
+};

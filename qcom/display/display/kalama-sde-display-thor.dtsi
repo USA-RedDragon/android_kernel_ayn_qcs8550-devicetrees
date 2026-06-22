@@ -1,0 +1,103 @@
+/*
+ * AYN Odin 2 Thor SDE display techpack body (CAF /plugin/ overlay include).
+ *
+ * Wires the Thor main (primary) panel -- ICNA3520 1080x1920 AMOLED cmd-mode
+ * with DSC, 60/120Hz -- into the kalama SDE display stack so it merges into the
+ * Thor board dtbo (board-id 0x1000C, msm-id 603 = QCS8550).
+ *
+ * Approach: reuse the repo's existing kalama-sde-display.dtsi (which provides
+ * the full SDE/DSI infrastructure: sde_dsi/sde_dsi1 connectors, mdss clocks,
+ * supplies, pinctrl) and layer ONLY the Thor deltas:
+ *   1) pull in the new ICNA3520 panel node (verbatim from AYN stock),
+ *   2) attach its per-panel phy-timings, DSC topology and clock selection
+ *      (verbatim from the AYN stock kalama-sde-display-common.dtsi),
+ *   3) attach its supplies, reset/te and backlight gpios
+ *      (verbatim from the AYN stock kalama-sde-display-hdk.dtsi),
+ *   4) select it as the default panel on the primary connector(s).
+ *
+ * Sources (lifted verbatim, see per-block notes):
+ *   - Ayn8550Dev/AYN_QCS8550_DEVICETREE_RELEASE THOR/.../display/
+ *       kalama-sde-display-common.dtsi  (phy-timings, select-clocks, topology)
+ *       kalama-sde-display-hdk.dtsi     (bl, reset/te, mipi-vdd gpios)
+ *       kalama-sde.dtsi / kalama-sde-display.dtsi (avdd/vddio rails)
+ *
+ * Thor's stock tree also defines a SECONDARY panel (CH13726A AMOLED, BOE,
+ * 1080x1240, on the secondary connector / DSI ctrl/phy 0, reset gpio 133).
+ * It is now reconstructed verbatim from the live device tree in
+ * dsi-panel-ch13726a-amoled-video.dtsi and wired below.
+ *
+ * Connector mapping (confirmed against the live merged device tree):
+ *   qcom,dsi-display-primary   (label sde_dsi)  default-panel = ICNA3520 (0x764)
+ *   qcom,dsi-display-secondary (label sde_dsi1) default-panel = CH13726A (0x75e)
+ */
+
+#include "kalama-sde-display.dtsi"
+#include "dsi-panel-icna3520-1080p-dsc-cmd.dtsi"
+#include "dsi-panel-ch13726a-amoled-video.dtsi"
+
+/*
+ * Per-panel PHY timings, DSC display-topology and DSI clock selection.
+ * Verbatim from AYN stock kalama-sde-display-common.dtsi (&dsi_icna3520_*).
+ * The ICNA3520 main panel is driven by DSI ctrl/phy 1 (pll_byte_clk1 /
+ * pll_dsi_clk1), matching qcom,dsi-ctrl-num/phy-num = <1> in the panel node.
+ */
+&dsi_icna3520_1080p_dsc_cmd {
+	qcom,dsi-select-clocks = "pll_byte_clk1", "pll_dsi_clk1";
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			/* DPHY regular margins */
+			qcom,mdss-dsi-panel-phy-timings = [00 15 05 05 14 1F 05
+			       05 06 02 04 00 13 0A]; // 60hz DSC vfp2006
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+
+		timing@1 {
+			/* DPHY regular margins */
+			qcom,mdss-dsi-panel-phy-timings = [00 15 05 05 14 1F 05
+                               05 06 02 04 00 13 0A]; // 120hz DSC
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+/*
+ * Panel supplies, backlight, reset/te and mipi-vdd enable gpios.
+ * Verbatim from AYN stock kalama-sde-display-hdk.dtsi (&dsi_icna3520_*).
+ *   reset  : tlmm 137   te (primary): tlmm 87 (from sde_dsi1 in base common)
+ *   mipi-vdd (avdd 2.8V enable): tlmm 142
+ *   bklight-en: tlmm 52
+ */
+&dsi_icna3520_1080p_dsc_cmd {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply>;
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,mdss-dsi-bl-min-level = <10>;
+	qcom,mdss-dsi-bl-max-level = <3413>;
+	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-bl-inverted-dbv;
+	qcom,platform-mipi-vdd = <&tlmm 142 0>;
+	qcom,platform-reset-gpio = <&tlmm 137 0>;
+	qcom,platform-bklight-en-gpio = <&tlmm 52 0>;
+};
+
+/*
+ * Default/boot panel selection, matching the live AYN device exactly.
+ *
+ * In this repo's kalama-sde-display-common.dtsi the connector node labels are:
+ *   sde_dsi  = qcom,dsi-display-primary   (te-gpio 86)
+ *   sde_dsi1 = qcom,dsi-display-secondary (te-gpio 87)
+ *
+ * In the live merged tree:
+ *   qcom,dsi-display-primary   -> qcom,dsi-default-panel = <0x764> = ICNA3520
+ *   qcom,dsi-display-secondary -> qcom,dsi-default-panel = <0x75e> = CH13726A
+ * So the ICNA3520 is the primary panel and the CH13726A is the real secondary.
+ */
+&sde_dsi {
+	qcom,dsi-default-panel = <&dsi_icna3520_1080p_dsc_cmd>;
+};
+
+&sde_dsi1 {
+	qcom,dsi-default-panel = <&dsi_ch13726a_amoled_video>;
+};

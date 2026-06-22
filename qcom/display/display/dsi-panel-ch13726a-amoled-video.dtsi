@@ -1,0 +1,127 @@
+/* Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+/*
+ * AYN Odin 2 Thor secondary display panel.
+ *
+ * Panel/DDIC: CH13726A AMOLED (BOE), 1080x1240, command-mode (despite the
+ * vendor "video mode" panel-name string the panel-type is dsi_cmd_mode),
+ * DSC-capable, 60Hz, 4-lane (lane 0-3).  Driven by DSI sec ctrl/phy 0
+ * (pll_byte_clk0 / pll_dsi_clk0).
+ *
+ * This node is lifted VERBATIM from the live (merged) AYN stock Thor device
+ * tree pulled from the device:
+ *   /home/reddragon/thor-dt-dump/nodes/ch13726a-secondary.dts
+ *   (node qcom,mdss_dsi_ch13726a_amoled_video, phandle 0x75e)
+ * All byte arrays, command sequences, timings and reset sequence below are
+ * copied exactly as published by AYN -- DO NOT hand-edit timings or bytes.
+ *
+ * The resolved supply phandle <0x751> in the live tree is the
+ * dsi_panel_pwr_supply node, referenced here by its repo label
+ * &dsi_panel_pwr_supply (matching the icna3520 panel file convention).
+ */
+
+&mdss_mdp {
+	dsi_ch13726a_amoled_video: qcom,mdss_dsi_ch13726a_amoled_video {
+		qcom,mdss-dsi-panel-name =
+			"ch13726a video mode dsi boe panel with DSC";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-panel-physical-type = "oled";
+		/*
+		 * CH13726A is wired as the SECONDARY display (sde_dsi1). The DSI
+		 * driver's dsi_display_parse_dt() reads only the -sec- variants for
+		 * the secondary display, so these MUST be the sec properties (value
+		 * 0 = ctrl0/phy0, verbatim from the device's live tree). Using the
+		 * non-sec names makes the secondary panel fail to probe (-ENODEV).
+		 */
+		qcom,dsi-sec-ctrl-num = <0>;
+		qcom,dsi-sec-phy-num = <0>;
+
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-border-color = <0>;
+
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 10>;
+		qcom,mdss-dsi-te-using-wd;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-wr-mem-start = <0x2c>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3c>;
+
+		qcom,panel-sec-supply-entries = <&dsi_panel_pwr_supply>;
+		qcom,dsi-select-sec-clocks = "pll_byte_clk0", "pll_dsi_clk0";
+
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-sec-bl-pmic-control-type = "bl_ctrl_dcs";
+		qcom,mdss-dsi-bl-min-level = <10>;
+		qcom,mdss-dsi-bl-max-level = <0xffff>;
+		qcom,mdss-brightness-max-level = <0xfff>;
+		qcom,mdss-dsi-bl-inverted-dbv;
+
+		qcom,platform-mipi-vdd = <&tlmm 143 0>;
+		qcom,platform-sec-reset-gpio = <&tlmm 133 0>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				qcom,default-topology-index = <0>;
+				qcom,display-topology = <1 0 1>;
+				qcom,mdss-dsi-panel-phy-timings =
+					[00 1b 07 06 16 21 07 07 07 02 04 00 17 0c];
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-width = <1080>;
+				qcom,mdss-dsi-panel-height = <1240>;
+				qcom,mdss-dsi-h-front-porch = <12>;
+				qcom,mdss-dsi-h-back-porch = <12>;
+				qcom,mdss-dsi-h-pulse-width = <4>;
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <12>;
+				qcom,mdss-dsi-v-front-porch = <12>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-timing-switch-command-state =
+					"dsi_lp_mode";
+
+				qcom,mdss-dsi-on-command = [
+					05 01 00 00 78 00 02 11 00
+					05 01 00 00 14 00 02 29 00];
+				qcom,mdss-dsi-off-command = [
+					05 01 00 00 32 00 02 28 00
+					05 01 00 00 78 00 02 10 00];
+
+				qcom,video-mode-pass-ram-commands-state =
+					"dsi_lp_mode";
+				qcom,mdss-dsi-ram-command = <
+					0x05010000 0x00000228 0x00390100
+					0x00000002 0xf0503901 0x00000000
+					0x02b91105 0x01000000 0x00022900>;
+				qcom,video-mode-bypass-ram-commands-state =
+					"dsi_lp_mode";
+				qcom,mdss-dsi-bypass-ram-command = <
+					0x05010000 0x00000228 0x00390100
+					0x00000002 0xf0503901 0x00000000
+					0x02b90005 0x01000000 0x00022900>;
+			};
+		};
+	};
+};

@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+#include "ayn-odin2-thor.dtsi"
+
+/ {
+	model = "AYN Odin 2 Thor";
+	/*
+	 * Keep a kalama-qrd compatible so the existing kalama/qrd driver bind
+	 * paths match the kalamap-qcs base this overlay attaches to, and add an
+	 * ayntec,thor compatible for device identification.
+	 */
+	compatible = "ayntec,thor", "qcom,kalama-qrd", "qcom,kalama", "qcom,qrd";
+
+	/*
+	 * msm-id MUST include <603 0x20000> (QCS8550 == kalamap-qcs.dtb) so the
+	 * merge_dtbs step pairs this overlay with kalamap-qcs.dtb, which is
+	 * already present in KALAMA_APQ_BASE_DTB. The extra ids mirror the stock
+	 * kalama-qrd-overlay precedent so the overlay can also pair with the
+	 * other kalama bases if ever needed.
+	 */
+	qcom,msm-id = <603 0x20000>, <519 0x20000>, <536 0x20000>, <601 0x20000>;
+
+	/* Unique board-id; not 0x10008 (mtp) / 0x1000B (qrd). */
+	qcom,board-id = <0x1000C 0>;
+};

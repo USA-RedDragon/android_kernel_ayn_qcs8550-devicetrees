@@ -1,0 +1,136 @@
+/*
+ * AYN Odin 2 Thor board device tree (CAF /plugin/ overlay body).
+ *
+ * FIRST-CUT GOAL: a clean-compiling, correctly-wired overlay that produces a
+ * merged ayn-odin2-thor-overlay*.dtbo paired with kalamap-qcs.dtb (QCS8550).
+ *
+ * Strategy: reuse the proven-compiling kalama-qrd board overrides (storage,
+ * volume key, LRA haptics @1300mV, microSD, UFS, USB redriver/eUSB2, touch,
+ * PMIC LED switches) by #include, then layer ONLY Thor-specific deltas that
+ * reference node labels guaranteed to exist in that include chain / kalama
+ * base. Thor's dual-panel display (CH13726A + ICNA3520), FocalTech dual-touch,
+ * htr3212 RGB controllers, and Bluetooth enable are deferred to the
+ * hardware-iteration phase (they need new panel dtsi + a display techpack
+ * overlay and are listed in risks).
+ *
+ * Hardware identity reference: LineageOS Gerrit 476787 (qcs8550-ayntec-thor),
+ * compatible "ayntec,thor","qcom,qcs8550","qcom,sm8550".
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/*
+ * Pull in the full, verified kalama-qrd board hardware. This already provides
+ * &sdhc_2, &soc/gpio_key (volume up on pm8550_gpios 6), &pm8550b_haptics
+ * (LRA, vmax 1300mV), &ufsphy_mem/&ufshc_mem, &pm8550_switch0/1/2,
+ * &pm8550_flash, &qupv3_se4_spi touch, &usb0 / redriver / eusb2, &battery_charger,
+ * &regulator_ocp_notifier, &pcie0 -- all referencing kalama base labels.
+ */
+#include "kalama-qrd.dtsi"
+
+/*
+ * Thor delta: add the AYN hardware button (KEY_F24) alongside the volume key.
+ * gpio_key is (re)declared under &soc by kalama-qrd.dtsi; we extend it here.
+ * gpio41 is the AYN/custom key per the THOR stock tree and Gerrit 476787.
+ * Only &soc and &tlmm are referenced, both of which exist in the kalama base.
+ */
+&soc {
+	gpio_key {
+		ayn_key {
+			label = "ayn_key";
+			gpios = <&tlmm 41 GPIO_ACTIVE_LOW>;
+			linux,input-type = <1>;
+			linux,code = <KEY_F24>;
+			gpio-key,wakeup;
+			debounce-interval = <15>;
+			linux,can-disable;
+		};
+	};
+};
+
+/*
+ * Thor main touch = FocalTech FTS (focaltech@38) on QUP SE4 *I2C* (i2c@a90000),
+ * not the goodix-on-SE4-SPI that kalama-qrd.dtsi wires up. SE4 I2C and SE4 SPI
+ * are the same physical controller (reg a90000); only one may be active.
+ *
+ * Proven against the live AYN tree (/home/reddragon/thor-dt-dump/live-fdt.dts):
+ *   i2c@a90000 status="okay" with focaltech@38; spi@a90000 status="disabled".
+ *   focaltech@38: irq=tlmm25, reset=tlmm24 (same GPIOs as goodix), coords
+ *   1080x1920 (0x438 x 0x780), max-touch 10, vcc_i2c=L12B(pm_humu_l12 1.8V),
+ *   vdd=L14B(pm_humu_l14 3.0V, == goodix avdd).
+ *
+ * All referenced labels exist in the kalama base our overlay compiles against:
+ *   &qupv3_se4_spi, &qupv3_se4_i2c (kalama-qupv3.dtsi),
+ *   &tlmm, &ts_active/&ts_int_suspend/&ts_reset_suspend/&ts_release
+ *   (kalama-pinctrl.dtsi -- note the live AYN ts_int_active/ts_reset_active are
+ *   NOT in the kalama base, so we reuse the base &ts_active which muxes the same
+ *   gpio24+gpio25), &L12B/&L14B (kalama-regulators.dtsi).
+ */
+
+/* Turn OFF goodix (kalama-qrd default) on SE4 SPI so SE4 can host I2C touch. */
+&qupv3_se4_spi {
+	status = "disabled";
+};
+
+/* Turn ON SE4 I2C and attach the FocalTech FTS controller. */
+&qupv3_se4_i2c {
+	status = "ok";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	focaltech@38 {
+		compatible = "focaltech,fts";
+		reg = <0x38>;
+		qcom,i2c-touch-active = "focaltech,fts";
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <25 0x2008>;
+		focaltech,irq-gpio = <&tlmm 25 0x2008>;
+		focaltech,reset-gpio = <&tlmm 24 0x00>;
+
+		focaltech,display-coords = <0 0 1080 1920>;
+		focaltech,max-touch-number = <10>;
+
+		vcc_i2c-supply = <&L12B>;
+		vdd-supply = <&L14B>;
+
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend",
+				"pmx_ts_release";
+		pinctrl-0 = <&ts_active>;
+		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
+		pinctrl-2 = <&ts_release>;
+		/*
+		 * Live tree adds panel = <&dsi_icna3520_1080p_dsc_cmd> to bind
+		 * touch suspend to panel power, but that label lives in the
+		 * separate display techpack overlay, NOT in this board overlay's
+		 * base -- referencing it here would be an unresolved fixup.
+		 * Omitted intentionally (FocalTech driver self-manages suspend).
+		 */
+	};
+};
+
+/*
+ * Thor RGB indicator LED = HTR3212L (htr3212l@3c, "kona,htr3212l") on QUP SE0
+ * I2C (i2c@a80000 == &qupv3_se0_i2c, disabled in kalama base). Live tree node
+ * carries only reg + dv-en1 enable-gpio (tlmm55). &qupv3_se0_i2c and &tlmm both
+ * exist in the kalama base.
+ */
+&qupv3_se0_i2c {
+	status = "ok";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	htr3212l@3c {
+		compatible = "kona,htr3212l";
+		reg = <0x3c>;
+		htr3212l,dv-en1 = <&tlmm 55 0x00>;
+	};
+};
+
+/*
+ * Haptics (qcom,hv-haptics@f000 on pm8550b) is already enabled with the exact
+ * Thor values (vmax 1300mV, lra-period 5880us, status=ok) by the included
+ * kalama-qrd.dtsi &pm8550b_haptics override -- live tree matches byte-for-byte.
+ * No Thor-specific haptics addition required here.
+ */
